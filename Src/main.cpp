@@ -474,11 +474,12 @@ keepgoing:
             avr.addItem(pps);
             mSum2.addItem(pps);
 
-            int corr = (int) std::round((float) mSum2.getSum() / 6.0 + 8 * avr.getAvr()); //½
+            int corr = (int) std::round(
+                    (float) mSum2.getSum() / 8.0 + 0.75 * avr.getAvr());
+
             actualSec = CNT_SEC + corr;
             TIM2->ARR = actualSec;
 
-            std::printf("$%d %d %d;\r\n", pps, corr, (int) std::round(avr.getAvr()));
             }
         } //for (;;)
     } //int main(void)
