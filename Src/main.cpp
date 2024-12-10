@@ -9,7 +9,7 @@
  *  Created on: Nov 11, 2024.
  *      Author: Kris Jaxa
  *            © Jaxasoft, Freeware,
- *              v.1.0.0
+ *              v.1.0.2
  *
  *******************************************************************************
  *
@@ -60,8 +60,13 @@ int rxdataSize;
 
 // TODO: choose better C last for crystal
 //const double _TIM_FREQ {90e6 - 2318}; // 56p
-const double _TIM_FREQ {90e6 + 3958};   // 39p  linear appr.  => 49.7p
-const int CNT_SEC = {(int) std::round(_TIM_FREQ)};
+const double _TIM_FREQ {90e6 + 3938};   // 39p  linear appr.  => 49.7p
+int CNT_SEC = {(int) std::round(_TIM_FREQ)};
+
+int old_av {0};
+float av;
+float a_av;
+float lav;
 
 // I want to separate interrupt, data processing and data gathering.
 const int DELTA {(int) std::round(0.5e-3 * _TIM_FREQ)};
@@ -88,7 +93,7 @@ bool init_done {false};
 
 // variables for timer control
 MovSum<int, 2> mSum2;
-Average<double, 100> avr;
+Average<double> avr;
 
 // timer value when PPS interrupt from GPS chip
 int pps {0};
@@ -189,11 +194,13 @@ void show_date(bool force = false)
         {
         nm.setVal(tim::tm.m);
         tim::tm.om = tim::tm.m;
+//        get_s_corr(tim::tm.h, tim::tm.m);
         }
 
     tim::tm.h = dt.getHour();
     if (tim::tm.oh != tim::tm.h)
         {
+
         nh.setVal(tim::tm.h);
         tim::tm.oh = tim::tm.h;
         txtDate.setText(dt.getDateStr().c_str());
@@ -348,6 +355,8 @@ int _write(int file, char *ptr, int len)
 #endif
 
 float pidVal = 0;
+int iav;
+int corr;
 
 /*!
  * @brief  The application entry point.
@@ -405,9 +414,9 @@ keepgoing:
     init_done = true;
 
     display.sendCommand("page 0");
-    // from timer counter corresponding -1us to 1 us to 0 - 200 on progress bar
+    // from timer counter corresponding -200ns to 200 ns to 0 - 200 on progress bar
     // y = ERR_A * pps + 100
-    const float ERR_A = 1.0e9 / _TIM_FREQ;
+    const float ERR_A = 0.5e9 / _TIM_FREQ;
     TIM2->ARR = CNT_SEC;
 // _______________________     forever     _______________________
     for (;;)
@@ -471,15 +480,36 @@ keepgoing:
 
             pidVal = 0;
 
-            avr.addItem(pps);
             mSum2.addItem(pps);
 
-            int corr = (int) std::round(
-                    (float) mSum2.getSum() / 8.0 + 0.75 * avr.getAvr());
+            if (avr.addItem(pps))
+                {
+                av = avr.getAvr();
+                iav = (int) std::round(av);
+                printf("%02d:%02d %d\r\n", dt.getHour(), dt.getMinute(), iav);
+                CNT_SEC += iav;
+                }
+
+            av = avr.getAvr();
+            iav = (int) std::round(av);
+            a_av = std::abs(av);
+            lav = std::log10(a_av);
+
+            if (iav != old_av)
+                {
+                old_av = iav;
+                printf("%d\r\n", iav);
+                }
+
+            if (lav > 2)
+                {
+                av /= lav;
+                }
+
+            corr = (int) std::round((float) mSum2.getSum() / 7.0 + av);
 
             actualSec = CNT_SEC + corr;
             TIM2->ARR = actualSec;
-
             }
         } //for (;;)
     } //int main(void)
